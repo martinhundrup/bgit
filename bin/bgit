@@ -1,0 +1,676 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+BGIT_VERSION="0.1.0"
+REMOTE_NAME="origin"
+
+EXIT_SUCCESS=0
+EXIT_INVALID_USAGE=1
+EXIT_NOT_GIT_REPO=2
+EXIT_DIRTY_WORKTREE=3
+EXIT_REMOTE_MISSING=4
+EXIT_PULL_FAILED=5
+EXIT_UNSHIPPED_COMMITS=6
+EXIT_MERGE_CONFLICT=7
+
+DRY_RUN=0
+VERBOSE="${BGIT_VERBOSE:-1}"
+if [[ "$VERBOSE" != "0" && "$VERBOSE" != "1" ]]; then
+  VERBOSE=1
+fi
+
+
+eprint() {
+  printf "%s\n" "$*" >&2
+}
+
+
+dbg() {
+  if [[ "$VERBOSE" -eq 1 ]]; then
+    printf "[bgit] %s\n" "$*" >&2
+  fi
+}
+
+
+die_lines() {
+  local code="$1"
+  shift
+  local msg
+  for msg in "$@"; do
+    eprint "$msg"
+  done
+  exit "$code"
+}
+
+
+die() {
+  local msg="$1"
+  local code="$2"
+  eprint "$msg"
+  exit "$code"
+}
+
+
+_git() {
+  command git "$@"
+}
+
+
+git_read() {
+  _git "$@"
+}
+
+
+git_write() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf "+ git"
+    for a in "$@"; do
+      printf " %q" "$a"
+    done
+    printf "\n"
+    return 0
+  fi
+
+  if [[ "$VERBOSE" -eq 1 ]]; then
+    {
+      printf "+ git"
+      for a in "$@"; do
+        printf " %q" "$a"
+      done
+      printf "\n"
+    } >&2
+  fi
+  _git "$@"
+}
+
+
+ensure_git_repo() {
+  if ! git_read rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    die "Not a git repository." "$EXIT_NOT_GIT_REPO"
+  fi
+}
+
+
+ensure_remote_origin() {
+  if ! git_read remote get-url "$REMOTE_NAME" >/dev/null 2>&1; then
+    die "Remote '$REMOTE_NAME' is missing." "$EXIT_REMOTE_MISSING"
+  fi
+}
+
+
+is_dirty() {
+  [[ -n "$(git_read status --porcelain 2>/dev/null)" ]]
+}
+
+
+ensure_clean_worktree() {
+  if is_dirty; then
+    die $'Working tree has uncommitted changes.\nUse git if you need advanced branch switching.' "$EXIT_DIRTY_WORKTREE"
+  fi
+}
+
+
+get_upstream() {
+  git_read rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || return 1
+}
+
+
+get_current_branch() {
+  local b
+  b="$(git_read branch --show-current 2>/dev/null || true)"
+  if [[ -z "$b" ]]; then
+    printf "%s\n" "(detached)"
+  else
+    printf "%s\n" "$b"
+  fi
+}
+
+
+ahead_behind() {
+  local upstream="$1"
+  local counts behind ahead
+  counts="$(git_read rev-list --left-right --count "${upstream}...HEAD" 2>/dev/null || true)"
+  behind="$(printf "%s" "$counts" | awk '{print $1}')"
+  ahead="$(printf "%s" "$counts" | awk '{print $2}')"
+  behind="${behind:-0}"
+  ahead="${ahead:-0}"
+  printf "%s %s\n" "$ahead" "$behind"
+}
+
+
+prompt_non_empty() {
+  local prompt="$1"
+  local msg=""
+  while true; do
+    printf "%s" "$prompt" >/dev/tty
+    IFS= read -r msg </dev/tty
+    msg="$(printf "%s" "$msg" | sed -e 's/^ *//' -e 's/ *$//')"
+    if [[ -n "$msg" ]]; then
+      printf "%s\n" "$msg"
+      return 0
+    fi
+    eprint "Commit message cannot be empty."
+  done
+}
+
+
+cmd_ship() {
+  local message=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -m|--message)
+        shift
+        message="${1:-}"
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      *)
+        die "Invalid usage." "$EXIT_INVALID_USAGE"
+        ;;
+    esac
+    shift || true
+  done
+
+  dbg "ship: ensuring git repo"
+  ensure_git_repo
+  dbg "ship: ensuring remote origin"
+  ensure_remote_origin
+
+  local upstream=""
+  local has_upstream=0
+  dbg "ship: checking upstream"
+  if upstream="$(get_upstream)"; then
+    has_upstream=1
+    dbg "ship: upstream found: $upstream"
+  else
+    dbg "ship: no upstream configured"
+  fi
+
+  local branch=""
+  if [[ "$has_upstream" -eq 0 ]]; then
+    branch="$(get_current_branch)"
+    dbg "ship: current branch (no upstream): $branch"
+    if [[ "$branch" == "(detached)" ]]; then
+      die_lines "$EXIT_INVALID_USAGE" \
+        "Detached HEAD: cannot set upstream." \
+        "Create/switch to a branch (e.g., 'git switch -c <branch>') then rerun bgit ship."
+    fi
+  fi
+
+  if [[ "$has_upstream" -eq 1 ]]; then
+    dbg "ship: pulling (--ff-only)..."
+    if ! git_write pull --ff-only; then
+      eprint "Remote history diverged."
+      eprint "Resolve using git (e.g., pull --rebase or manual merge), then rerun bgit ship."
+      exit "$EXIT_PULL_FAILED"
+    fi
+    dbg "ship: pull complete"
+  fi
+
+  dbg "ship: staging all changes (git add .)"
+  git_write add . || exit $?
+  dbg "ship: staging complete"
+
+  local has_staged_changes=0
+  dbg "ship: checking for staged changes"
+  if ! git_read diff --cached --quiet >/dev/null 2>&1; then
+    has_staged_changes=1
+  fi
+
+  if [[ "$has_upstream" -eq 1 ]]; then
+    dbg "ship: computing ahead/behind"
+    local ab ahead behind
+    ab="$(ahead_behind "$upstream")"
+    ahead="$(printf "%s" "$ab" | awk '{print $1}')"
+    behind="$(printf "%s" "$ab" | awk '{print $2}')"
+    dbg "ship: ahead=$ahead behind=$behind staged=$has_staged_changes"
+
+    if [[ "$has_staged_changes" -eq 0 ]] && ! is_dirty && [[ "${ahead:-0}" -eq 0 ]] && [[ "${behind:-0}" -eq 0 ]]; then
+      printf "%s\n" "Already up to date."
+      exit "$EXIT_SUCCESS"
+    fi
+  fi
+
+  if [[ "$has_staged_changes" -eq 1 ]]; then
+    if [[ -z "$message" ]]; then
+      dbg "ship: prompting for commit message (waiting for input)..."
+      message="$(prompt_non_empty "Commit message: ")"
+      dbg "ship: got commit message"
+    fi
+    dbg "ship: committing..."
+    git_write commit -m "$message" || exit $?
+    dbg "ship: commit complete"
+  else
+    dbg "ship: no staged changes, skipping commit"
+  fi
+
+  if [[ "$has_upstream" -eq 1 ]]; then
+    dbg "ship: pushing..."
+    git_write push || exit $?
+    dbg "ship: push complete"
+  else
+    dbg "ship: pushing with -u (setting upstream)..."
+    git_write push -u "$REMOTE_NAME" "$branch" || exit $?
+    dbg "ship: push complete"
+  fi
+  dbg "ship: done"
+  exit "$EXIT_SUCCESS"
+}
+
+
+branch_exists_local() {
+  local name="$1"
+  git_read show-ref --verify --quiet "refs/heads/${name}" >/dev/null 2>&1
+}
+
+
+branch_exists_remote() {
+  local name="$1"
+  git_read show-ref --verify --quiet "refs/remotes/${REMOTE_NAME}/${name}" >/dev/null 2>&1
+}
+
+
+cmd_branch() {
+  local name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      *)
+        if [[ -z "$name" ]]; then
+          name="$1"
+        else
+          die "Invalid usage." "$EXIT_INVALID_USAGE"
+        fi
+        ;;
+    esac
+    shift || true
+  done
+
+  if [[ -z "$name" ]]; then
+    die "Branch name required." "$EXIT_INVALID_USAGE"
+  fi
+
+  ensure_git_repo
+  ensure_clean_worktree
+  ensure_remote_origin
+
+  git_write fetch "$REMOTE_NAME" --prune || exit $?
+
+  if branch_exists_local "$name"; then
+    git_write switch "$name" || exit $?
+  elif branch_exists_remote "$name"; then
+    git_write switch --track -c "$name" "${REMOTE_NAME}/${name}" || exit $?
+  else
+    git_write switch -c "$name" || exit $?
+    printf "Created new local branch '%s'.\n" "$name"
+    printf "%s\n" "Run bgit ship to publish and set upstream."
+  fi
+
+  local upstream
+  if ! upstream="$(get_upstream)"; then
+    printf "%s\n" "Branch has no upstream (unpublished)."
+    exit "$EXIT_SUCCESS"
+  fi
+
+  if ! git_write pull --ff-only; then
+    eprint "Remote history diverged."
+    exit "$EXIT_PULL_FAILED"
+  fi
+
+  exit "$EXIT_SUCCESS"
+}
+
+
+switch_branch_maybe_create_tracking() {
+  local name="$1"
+  if branch_exists_local "$name"; then
+    git_write switch "$name" || return $?
+    return 0
+  fi
+  if branch_exists_remote "$name"; then
+    git_write switch --track -c "$name" "${REMOTE_NAME}/${name}" || return $?
+    return 0
+  fi
+  return 1
+}
+
+
+validate_branch_shipped() {
+  local name="$1"
+
+  if ! switch_branch_maybe_create_tracking "$name"; then
+    die "Branch '$name' not found locally or on ${REMOTE_NAME}." "$EXIT_INVALID_USAGE"
+  fi
+
+  local upstream
+  if ! upstream="$(get_upstream)"; then
+    die_lines "$EXIT_REMOTE_MISSING" "Branch '$name' has no upstream." "Cannot verify shipped state."
+  fi
+
+  if ! git_write pull --ff-only; then
+    die "Remote history diverged. Resolve using git, then rerun bgit merge." "$EXIT_PULL_FAILED"
+  fi
+
+  if is_dirty; then
+    die_lines "$EXIT_DIRTY_WORKTREE" "Branch '$name' has uncommitted changes." "Run bgit ship on '$name' first."
+  fi
+
+  local ab ahead behind
+  ab="$(ahead_behind "$upstream")"
+  ahead="$(printf "%s" "$ab" | awk '{print $1}')"
+  behind="$(printf "%s" "$ab" | awk '{print $2}')"
+  if [[ "${ahead:-0}" -gt 0 ]]; then
+    die_lines "$EXIT_UNSHIPPED_COMMITS" "Branch '$name' has local commits not shipped." "Run bgit ship on '$name' first."
+  fi
+}
+
+
+cmd_merge() {
+  if [[ $# -ne 3 ]] || [[ "$2" != "->" ]]; then
+    die "Invalid merge format. Use: bgit merge <source> -> <destination>" "$EXIT_INVALID_USAGE"
+  fi
+
+  local source="$1"
+  local dest="$3"
+
+  if [[ -z "$source" ]] || [[ -z "$dest" ]] || [[ "$source" == "$dest" ]]; then
+    die "Invalid merge format. Source and destination must be different." "$EXIT_INVALID_USAGE"
+  fi
+
+  ensure_git_repo
+  ensure_remote_origin
+  ensure_clean_worktree
+
+  git_write fetch "$REMOTE_NAME" --prune || exit $?
+
+  validate_branch_shipped "$source"
+  validate_branch_shipped "$dest"
+
+  git_write switch "$dest" || exit $?
+  if ! git_write pull --ff-only; then
+    eprint "Remote history diverged."
+    exit "$EXIT_PULL_FAILED"
+  fi
+
+  if ! git_write merge --no-ff "$source"; then
+    eprint "Merge has conflicts."
+    eprint "Resolve using git."
+    eprint "After resolving, run bgit ship on '$dest'."
+    exit "$EXIT_MERGE_CONFLICT"
+  fi
+
+  # Ship destination
+  DRY_RUN=0
+  cmd_ship
+}
+
+
+cmd_status() {
+  ensure_git_repo
+  local remote_url
+  remote_url="$(git_read remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
+
+  local upstream
+  upstream="$(get_upstream 2>/dev/null || true)"
+
+  local branch dirty
+  branch="$(get_current_branch)"
+  if is_dirty; then dirty="dirty"; else dirty="clean"; fi
+
+  local ahead=0 behind=0
+  if [[ -n "$upstream" ]]; then
+    git_read fetch "$REMOTE_NAME" --prune >/dev/null 2>&1 || true
+    read -r ahead behind <<<"$(ahead_behind "$upstream")"
+  fi
+
+  printf "Branch:   %s\n" "$branch"
+  printf "Upstream: %s\n" "${upstream:-'(none)'}"
+  printf "Remote:   %s\n" "${remote_url:-'(unknown)'}"
+  printf "State:    %s\n" "$dirty"
+  if [[ -n "$upstream" ]]; then
+    printf "Ahead:    %s\n" "$ahead"
+    printf "Behind:   %s\n" "$behind"
+  fi
+
+  if [[ "$dirty" == "dirty" ]] || ([[ -n "$upstream" ]] && { [[ "$ahead" -gt 0 ]] || [[ "$behind" -gt 0 ]]; }); then
+    printf "%s\n" "Next:     bgit ship"
+  else
+    printf "%s\n" "Next:     (nothing)"
+  fi
+}
+
+
+cmd_check() {
+  ensure_git_repo
+  ensure_remote_origin
+
+  local upstream
+  upstream="$(get_upstream 2>/dev/null || true)"
+
+  local branch dirty
+  branch="$(get_current_branch)"
+  if is_dirty; then dirty="yes"; else dirty="no"; fi
+
+  printf "Branch:   %s\n" "$branch"
+  printf "Upstream: %s\n" "${upstream:-'(none)'}"
+  printf "Dirty:    %s\n" "$dirty"
+
+  if [[ -z "$upstream" ]]; then
+    printf "%s\n" "Would ship succeed? no (no upstream)"
+    exit "$EXIT_SUCCESS"
+  fi
+
+  git_read fetch "$REMOTE_NAME" --prune >/dev/null 2>&1 || true
+  local ahead behind
+  read -r ahead behind <<<"$(ahead_behind "$upstream")"
+  printf "Ahead:    %s\n" "$ahead"
+  printf "Behind:   %s\n" "$behind"
+
+  if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
+    printf "%s\n" "Would ship succeed? no (diverged; pull --ff-only would fail)"
+  else
+    printf "%s\n" "Would ship succeed? yes"
+  fi
+}
+
+
+cmd_where() {
+  ensure_git_repo
+
+  local root cwd branch upstream remote
+  root="$(git_read rev-parse --show-toplevel 2>/dev/null || true)"
+  cwd="$(pwd)"
+  branch="$(get_current_branch)"
+  upstream="$(get_upstream 2>/dev/null || true)"
+  remote="$(git_read remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
+
+  printf "Repo:     %s\n" "$root"
+  printf "CWD:      %s\n" "$cwd"
+  printf "Branch:   %s\n" "$branch"
+  printf "Upstream: %s\n" "${upstream:-'(none)'}"
+  printf "Remote:   %s\n" "$remote"
+}
+
+
+cmd_log() {
+  ensure_git_repo
+  git_read log -5 --pretty=format:'%h %s (%cr)'
+}
+
+
+cmd_remote() {
+  ensure_git_repo
+
+  local remotes
+  remotes="$(git_read remote -v 2>/dev/null || true)"
+  if [[ -n "$remotes" ]]; then
+    printf "%s\n" "Remotes:"
+    printf "%s\n" "$remotes"
+  fi
+
+  local upstream
+  upstream="$(get_upstream 2>/dev/null || true)"
+  printf "Upstream: %s\n" "${upstream:-'(none)'}"
+}
+
+
+cmd_version() {
+  printf "bgit %s\n" "$BGIT_VERSION"
+  git_read --version 2>/dev/null || true
+}
+
+
+HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> -> <b>      safe merge + ship\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nVerbose: bgit prints "+ git ..." before each mutating git command. Set BGIT_VERBOSE=0 to disable.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
+
+
+default_remote_branch() {
+  local ref
+  ref="$(git_read symbolic-ref --quiet "refs/remotes/${REMOTE_NAME}/HEAD" 2>/dev/null || true)"
+  if [[ -n "$ref" ]]; then
+    ref="${ref#refs/remotes/${REMOTE_NAME}/}"
+    if [[ -n "$ref" ]]; then
+      printf "%s\n" "$ref"
+      return 0
+    fi
+  fi
+
+  local candidates
+  candidates="$(git_read for-each-ref "refs/remotes/${REMOTE_NAME}" --format='%(refname:short)' 2>/dev/null | sed -e "s#^${REMOTE_NAME}/##" | grep -v '^HEAD$' || true)"
+  if printf "%s\n" "$candidates" | grep -Fxq "main"; then
+    printf "%s\n" "main"
+    return 0
+  fi
+  if printf "%s\n" "$candidates" | grep -Fxq "master"; then
+    printf "%s\n" "master"
+    return 0
+  fi
+
+  local first
+  first="$(printf "%s\n" "$candidates" | head -n 1)"
+  if [[ -n "$first" ]]; then
+    printf "%s\n" "$first"
+    return 0
+  fi
+
+  return 1
+}
+
+
+cmd_nuke() {
+  local yes=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --yes)
+        yes=1
+        ;;
+      --dry-run)
+        DRY_RUN=1
+        ;;
+      *)
+        die "Invalid usage." "$EXIT_INVALID_USAGE"
+        ;;
+    esac
+    shift || true
+  done
+
+  ensure_git_repo
+  ensure_remote_origin
+
+  if [[ "$yes" -ne 1 ]]; then
+    eprint "WARNING: bgit nuke will delete ALL local changes and local-only branches."
+    eprint "It will make your working tree and local branches match origin."
+    printf "%s" "Type 'nuke' to continue: "
+    local confirm
+    IFS= read -r confirm
+    confirm="$(printf "%s" "$confirm" | tr '[:upper:]' '[:lower:]' | sed -e 's/^ *//' -e 's/ *$//')"
+    if [[ "$confirm" != "nuke" ]]; then
+      eprint "Aborted."
+      exit "$EXIT_INVALID_USAGE"
+    fi
+  fi
+
+  git_write fetch "$REMOTE_NAME" --prune || exit $?
+
+  local def
+  if ! def="$(default_remote_branch)"; then
+    die "Remote '${REMOTE_NAME}' has no branches." "$EXIT_REMOTE_MISSING"
+  fi
+
+  local original
+  original="$(get_current_branch)"
+
+  git_write switch --detach -f "${REMOTE_NAME}/${def}" || exit $?
+
+  local remote_branches local_branches
+  remote_branches="$(git_read for-each-ref "refs/remotes/${REMOTE_NAME}" --format='%(refname:short)' 2>/dev/null | sed -e "s#^${REMOTE_NAME}/##" | grep -v '^HEAD$' || true)"
+  local_branches="$(git_read for-each-ref refs/heads --format='%(refname:short)' 2>/dev/null || true)"
+
+  # Force-create/update local branches from remote
+  local b
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    git_write branch -f "$b" "${REMOTE_NAME}/${b}" || exit $?
+    git_write branch --set-upstream-to "${REMOTE_NAME}/${b}" "$b" >/dev/null 2>&1 || true
+  done <<<"$remote_branches"
+
+  # Delete local-only branches
+  while IFS= read -r b; do
+    [[ -z "$b" ]] && continue
+    if ! printf "%s\n" "$remote_branches" | grep -Fxq "$b"; then
+      git_write branch -D "$b" || exit $?
+    fi
+  done <<<"$local_branches"
+
+  local final="$def"
+  if [[ "$original" != "(detached)" ]] && printf "%s\n" "$remote_branches" | grep -Fxq "$original"; then
+    final="$original"
+  fi
+
+  git_write switch -C "$final" "${REMOTE_NAME}/${final}" || exit $?
+  git_write reset --hard "${REMOTE_NAME}/${final}" || exit $?
+  git_write clean -fdx || exit $?
+
+  printf "Nuked. Local state now matches %s/%s.\n" "$REMOTE_NAME" "$final"
+}
+
+
+main() {
+  if ! command -v git >/dev/null 2>&1; then
+    die "git not found in PATH." "$EXIT_INVALID_USAGE"
+  fi
+
+  if [[ $# -eq 0 ]]; then
+    printf "%s" "$HELP_TEXT"
+    exit "$EXIT_SUCCESS"
+  fi
+
+  local cmd="$1"
+  shift || true
+
+  case "$cmd" in
+    ship) cmd_ship "$@" ;;
+    branch) cmd_branch "$@" ;;
+    merge) cmd_merge "$@" ;;
+    status) cmd_status "$@" ;;
+    check) cmd_check "$@" ;;
+    where) cmd_where "$@" ;;
+    log) cmd_log "$@" ;;
+    remote) cmd_remote "$@" ;;
+    help) printf "%s" "$HELP_TEXT" ;;
+    version) cmd_version "$@" ;;
+    nuke) cmd_nuke "$@" ;;
+    *)
+      printf "%s" "$HELP_TEXT" >&2
+      exit "$EXIT_INVALID_USAGE"
+      ;;
+  esac
+}
+
+main "$@"
