@@ -422,7 +422,7 @@ cmd_merge() {
     exit "$EXIT_PULL_FAILED"
   fi
 
-  if ! git_write merge --no-ff "$source"; then
+  if ! git_write merge --no-ff -m "Merge '$source' into '$dest'" "$source"; then
     eprint "Merge has conflicts."
     eprint "Resolve using git."
     eprint "After resolving, run bgit ship on '$dest'."
