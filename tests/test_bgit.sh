@@ -273,14 +273,21 @@ git checkout -b feature >/dev/null 2>&1
 echo "feature work" > feature.txt
 git add . && git commit -m "feature commit" >/dev/null 2>&1
 git push -u origin feature >/dev/null 2>&1
-git checkout main >/dev/null 2>&1
+# Create a third branch to merge from (neither source nor dest)
+git checkout -b other >/dev/null 2>&1
+echo "other" > other.txt
+git add . && git commit -m "other commit" >/dev/null 2>&1
+git push -u origin other >/dev/null 2>&1
 popd >/dev/null
 
 run_bgit merge feature to main
 assert_exit "merge exits 0" 0
-assert_branch "now on main" "main"
+assert_branch "returned to original branch (other)" "other"
 
 # Check feature.txt exists on main
+pushd "$WORK_REPO" >/dev/null
+git checkout main >/dev/null 2>&1
+popd >/dev/null
 if [[ -f "$WORK_REPO/feature.txt" ]]; then
   printf "  %s✓%s feature.txt present on main after merge\n" "$GREEN" "$RESET"
   ((PASS++))
