@@ -250,7 +250,7 @@ cmd_ship() {
 
     if [[ "$has_staged_changes" -eq 0 ]] && ! is_dirty && [[ "${ahead:-0}" -eq 0 ]] && [[ "${behind:-0}" -eq 0 ]]; then
       printf "%s\n" "Already up to date."
-      exit "$EXIT_SUCCESS"
+      return 0
     fi
   fi
 
@@ -277,7 +277,7 @@ cmd_ship() {
     dbg "ship: push complete"
   fi
   dbg "ship: done"
-  exit "$EXIT_SUCCESS"
+  return 0
 }
 
 
@@ -411,6 +411,10 @@ cmd_merge() {
   ensure_remote_origin
   ensure_clean_worktree
 
+  local original_branch
+  original_branch="$(get_current_branch)"
+  dbg "merge: starting on branch: $original_branch"
+
   git_write fetch "$REMOTE_NAME" --prune || exit $?
 
   validate_branch_shipped "$source"
@@ -432,6 +436,12 @@ cmd_merge() {
   # Ship destination
   DRY_RUN=0
   cmd_ship
+
+  # Return to original branch
+  dbg "merge: switching back to $original_branch"
+  if [[ "$original_branch" != "(detached)" ]] && [[ "$original_branch" != "$dest" ]]; then
+    git_write switch "$original_branch" || true
+  fi
 }
 
 
