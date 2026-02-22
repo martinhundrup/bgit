@@ -1,4 +1,8 @@
-# bgit — Functional Specification (v1)
+# bgit
+
+## About
+
+bgit
 
 ## Installation
 
@@ -66,7 +70,8 @@ It is intentionally minimal. It does not expose advanced Git functionality. If a
 Mutating commands:
 - bgit ship
 - bgit branch <name>
-- bgit merge <source> -> <destination>
+- bgit merge <source> to <destination>
+- bgit undo
 - bgit nuke
 
 Read-only / diagnostic commands:
@@ -195,7 +200,7 @@ If no upstream:
 
 ---
 
-# 4.3 bgit merge <source> -> <destination>
+# 4.3 bgit merge <source> to <destination>
 
 ## Purpose
 
@@ -203,11 +208,11 @@ Safely merge one branch into another, regardless of current branch.
 
 ## Format
 
-    bgit merge <source> -> <destination>
+    bgit merge <source> to <destination>
 
 Example:
 
-    bgit merge feature/login -> main
+    bgit merge feature/login to main
 
 ## Rules
 
@@ -221,10 +226,10 @@ Example:
 Step 0 — Parse
 
 Require exact format:
-    <source> -> <destination>
+    <source> to <destination>
 
 Reject if:
-- Missing arrow
+- Missing keyword
 - Same branch on both sides
 
 Step 1 — Preconditions
@@ -302,7 +307,39 @@ Otherwise, ship the branch that got merged into:
 
 ---
 
-# 4.4 bgit nuke
+# 4.4 bgit undo
+
+## Purpose
+
+Remove the last commit from the current branch and force-push the result to remote.
+
+This is intentionally destructive.
+
+## Behavior
+
+Execution order:
+
+1. Ensure inside a git repository.
+2. Ensure remote `origin` exists.
+3. Ensure not in detached HEAD state.
+4. Ensure there is more than one commit (cannot undo the only commit).
+5. Confirm intent (unless `--yes`).
+6. Run:
+     - git reset --hard HEAD~1
+     - git push --force
+
+Result:
+- The last commit is removed from the branch locally and on remote.
+- Any changes from that commit are permanently lost.
+
+## Flags
+
+- --dry-run
+    Print planned git commands without executing.
+
+---
+
+# 4.5 bgit nuke
 
 ## Purpose
 
@@ -316,8 +353,7 @@ Execution order:
 
 1. Ensure inside a git repository.
 2. Ensure remote `origin` exists.
-3. Confirm intent (unless `--yes`).
-4. Run:
+3. Run:
      - git fetch origin --prune
      - Determine the default remote branch from `origin/HEAD`
      - Switch to a detached HEAD at `origin/<default>`
@@ -334,9 +370,6 @@ Result:
 - Any local-only commits/branches are discarded.
 
 ## Flags
-
-- --yes
-    Skip interactive confirmation.
 
 - --dry-run
     Print planned git commands without executing.
