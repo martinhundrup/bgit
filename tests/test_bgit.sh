@@ -440,14 +440,6 @@ assert_exit "status dirty exits 0" 0
 assert_contains "status shows dirty" "dirty"
 assert_contains "status suggests ship" "bgit ship"
 
-# ── log ──────────────────────────────────────────────────────────────────
-section "log"
-setup_repos
-
-run_bgit log
-assert_exit "log exits 0" 0
-assert_contains "log shows initial commit" "initial"
-
 # ── not a git repo ──────────────────────────────────────────────────────
 section "error: not a git repo"
 NOT_REPO="$TMPDIR_ROOT/not-a-repo"

@@ -6,6 +6,22 @@ All commands support the `-v` flag for verbose/debug output (or set `BGIT_VERBOS
 
 ---
 
+## Commands
+
+**Mutating**
+- [`bgit ship`](#bgit-ship)
+- [`bgit branch <name>`](#bgit-branch-name)
+- [`bgit merge <source> to <destination>`](#bgit-merge-source-to-destination)
+- [`bgit undo`](#bgit-undo)
+- [`bgit nuke`](#bgit-nuke)
+
+**Diagnostic**
+- [`bgit status`](#bgit-status)
+- [`bgit help`](#bgit-help)
+- [`bgit version`](#bgit-version)
+
+---
+
 ## Mutating Commands
 
 ### `bgit ship`
@@ -194,8 +210,6 @@ After nuke, your local state is identical to the remote.
 bgit nuke              # reset everything to match origin
 bgit nuke --dry-run    # see what would be destroyed
 ```
-bgit nuke --dry-run    # see what would be destroyed
-```
 
 ---
 
@@ -237,33 +251,6 @@ bgit status
 # Ahead:    0
 # Behind:   0
 # Ship:     yes (run bgit ship)
-```
-
----
-
-### `bgit log`
-
-Show the last 5 commits on the current branch.
-
-**Output format:**
-
-```
-<short_sha> <message> (<relative time>)
-```
-
-**Flags:**
-
-| Flag | Description |
-|------|-------------|
-| `-v` | Enable verbose/debug output |
-
-**Use case:**
-
-```bash
-bgit log
-# a1b2c3d fix login validation (2 hours ago)
-# d4e5f6a add user model (5 hours ago)
-# 7890abc initial commit (2 days ago)
 ```
 
 ---

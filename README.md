@@ -4,7 +4,19 @@
 
 bgit ('better' git or 'bad' git, depending on who you ask) was made to simplify the common workflows of working with git, while maintaining full compatability.
 
-See the [list of commands](commands.md) to learn more about it's features.
+See the [list of commands](commands.md) to learn more about its features.
+
+**Mutating**
+- [`bgit ship`](commands.md#bgit-ship)
+- [`bgit branch <name>`](commands.md#bgit-branch-name)
+- [`bgit merge <source> to <destination>`](commands.md#bgit-merge-source-to-destination)
+- [`bgit undo`](commands.md#bgit-undo)
+- [`bgit nuke`](commands.md#bgit-nuke)
+
+**Diagnostic**
+- [`bgit status`](commands.md#bgit-status)
+- [`bgit help`](commands.md#bgit-help)
+- [`bgit version`](commands.md#bgit-version)
 
 ## Installation
 
@@ -78,7 +90,6 @@ Mutating commands:
 
 Read-only / diagnostic commands:
 - bgit status
-- bgit log
 - bgit help
 - bgit version
 
@@ -387,11 +398,6 @@ Display:
 - Clean/dirty
 - Ahead/behind
 - Ship readiness (yes/no with reason)
-
-## bgit log
-
-Display last 5 commits:
-    <short_sha> <message> (<relative time>)
 
 ## bgit help
 
