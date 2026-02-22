@@ -76,10 +76,7 @@ Mutating commands:
 
 Read-only / diagnostic commands:
 - bgit status
-- bgit check
-- bgit where
 - bgit log
-- bgit remote
 - bgit help
 - bgit version
 
@@ -380,45 +377,19 @@ Result:
 ## bgit status
 
 Display:
-- Current branch
-- Upstream tracking
-- Clean/dirty
-- Ahead/behind
-- Suggested next step
-
-## bgit check
-
-Preflight for ship.
-
-Display:
-- Branch
-- Upstream
-- Dirty?
-- Ahead/behind?
-- Would ship succeed?
-
-Does not modify state.
-
-## bgit where
-
-Display:
-- Repo root path
+- Repository root path
 - Current working directory
 - Current branch
-- Upstream
+- Upstream tracking
 - Remote URL
+- Clean/dirty
+- Ahead/behind
+- Ship readiness (yes/no with reason)
 
 ## bgit log
 
 Display last 5 commits:
     <short_sha> <message> (<relative time>)
-
-## bgit remote
-
-Display:
-- Remote name(s)
-- URL(s)
-- Current branch upstream mapping
 
 ## bgit help
 

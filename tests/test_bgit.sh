@@ -425,8 +425,10 @@ setup_repos
 
 run_bgit status
 assert_exit "status exits 0" 0
-assert_contains "status shows branch" "Branch:"
-assert_contains "status shows state" "State:"
+assert_contains "status shows Repo" "Repo:"
+assert_contains "status shows Branch" "Branch:"
+assert_contains "status shows State" "State:"
+assert_contains "status shows Ship readiness" "Ship:"
 
 # ── status dirty ─────────────────────────────────────────────────────────
 section "status: dirty"
@@ -438,24 +440,6 @@ assert_exit "status dirty exits 0" 0
 assert_contains "status shows dirty" "dirty"
 assert_contains "status suggests ship" "bgit ship"
 
-# ── check ────────────────────────────────────────────────────────────────
-section "check"
-setup_repos
-
-run_bgit check
-assert_exit "check exits 0" 0
-assert_contains "check shows branch" "Branch:"
-assert_contains "check shows would ship" "Would ship succeed?"
-
-# ── where ────────────────────────────────────────────────────────────────
-section "where"
-setup_repos
-
-run_bgit where
-assert_exit "where exits 0" 0
-assert_contains "where shows Repo:" "Repo:"
-assert_contains "where shows Branch:" "Branch:"
-
 # ── log ──────────────────────────────────────────────────────────────────
 section "log"
 setup_repos
@@ -463,14 +447,6 @@ setup_repos
 run_bgit log
 assert_exit "log exits 0" 0
 assert_contains "log shows initial commit" "initial"
-
-# ── remote ───────────────────────────────────────────────────────────────
-section "remote"
-setup_repos
-
-run_bgit remote
-assert_exit "remote exits 0" 0
-assert_contains "remote shows origin" "origin"
 
 # ── not a git repo ──────────────────────────────────────────────────────
 section "error: not a git repo"
