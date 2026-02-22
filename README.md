@@ -2,7 +2,9 @@
 
 ## About
 
-bgit
+bgit ('better' git or 'bad' git, depending on who you ask) was made to simplify the common workflows of working with git, while maintaining full campatability.
+
+See the [list of commands](commands.md) to learn more about it's features.
 
 ## Installation
 
