@@ -205,16 +205,18 @@ These commands are read-only and never modify your repository.
 
 ### `bgit status`
 
-Show the current state of your repository.
+Show the current state of your repository, including whether a ship would succeed.
 
 **Output includes:**
 
+- Repository root path
+- Current working directory
 - Current branch
 - Upstream tracking branch
 - Remote URL
 - Clean or dirty state
 - Commits ahead/behind remote
-- Suggested next step
+- Ship readiness (yes/no with reason)
 
 **Flags:**
 
@@ -226,76 +228,15 @@ Show the current state of your repository.
 
 ```bash
 bgit status
+# Repo:     /Users/you/projects/myapp
+# CWD:      /Users/you/projects/myapp/src
 # Branch:   main
 # Upstream: origin/main
 # Remote:   git@github.com:user/repo.git
 # State:    dirty
 # Ahead:    0
 # Behind:   0
-# Next:     bgit ship
-```
-
----
-
-### `bgit check`
-
-Preflight check for ship. Tells you whether `bgit ship` would succeed without actually doing anything.
-
-**Output includes:**
-
-- Current branch
-- Upstream tracking branch
-- Whether the working tree is dirty
-- Commits ahead/behind remote
-- Whether ship would succeed (and why not, if applicable)
-
-**Flags:**
-
-| Flag | Description |
-|------|-------------|
-| `-v` | Enable verbose/debug output |
-
-**Use case:**
-
-```bash
-bgit check
-# Branch:   main
-# Upstream: origin/main
-# Dirty:    no
-# Ahead:    2
-# Behind:   0
-# Would ship succeed? yes
-```
-
----
-
-### `bgit where`
-
-Show where you are in the filesystem and git graph.
-
-**Output includes:**
-
-- Repository root path
-- Current working directory
-- Current branch
-- Upstream tracking branch
-- Remote URL
-
-**Flags:**
-
-| Flag | Description |
-|------|-------------|
-| `-v` | Enable verbose/debug output |
-
-**Use case:**
-
-```bash
-bgit where
-# Repo:     /Users/you/projects/myapp
-# CWD:      /Users/you/projects/myapp/src
-# Branch:   feature/login
-# Upstream: origin/feature/login
-# Remote:   git@github.com:user/myapp.git
+# Ship:     yes (run bgit ship)
 ```
 
 ---
@@ -323,33 +264,6 @@ bgit log
 # a1b2c3d fix login validation (2 hours ago)
 # d4e5f6a add user model (5 hours ago)
 # 7890abc initial commit (2 days ago)
-```
-
----
-
-### `bgit remote`
-
-Show remote configuration and upstream mapping.
-
-**Output includes:**
-
-- Remote names and URLs (fetch and push)
-- Current branch's upstream mapping
-
-**Flags:**
-
-| Flag | Description |
-|------|-------------|
-| `-v` | Enable verbose/debug output |
-
-**Use case:**
-
-```bash
-bgit remote
-# Remotes:
-# origin  git@github.com:user/repo.git (fetch)
-# origin  git@github.com:user/repo.git (push)
-# Upstream: origin/main
 ```
 
 ---

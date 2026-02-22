@@ -447,6 +447,11 @@ cmd_merge() {
 
 cmd_status() {
   ensure_git_repo
+
+  local root cwd
+  root="$(git_read rev-parse --show-toplevel 2>/dev/null || true)"
+  cwd="$(pwd)"
+
   local remote_url
   remote_url="$(git_read remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
 
@@ -463,6 +468,8 @@ cmd_status() {
     read -r ahead behind <<<"$(ahead_behind "$upstream")"
   fi
 
+  printf "Repo:     %s\n" "$root"
+  printf "CWD:      %s\n" "$cwd"
   printf "Branch:   %s\n" "$branch"
   printf "Upstream: %s\n" "${upstream:-'(none)'}"
   printf "Remote:   %s\n" "${remote_url:-'(unknown)'}"
@@ -472,63 +479,16 @@ cmd_status() {
     printf "Behind:   %s\n" "$behind"
   fi
 
-  if [[ "$dirty" == "dirty" ]] || ([[ -n "$upstream" ]] && { [[ "$ahead" -gt 0 ]] || [[ "$behind" -gt 0 ]]; }); then
-    printf "%s\n" "Next:     bgit ship"
-  else
-    printf "%s\n" "Next:     (nothing)"
-  fi
-}
-
-
-cmd_check() {
-  ensure_git_repo
-  ensure_remote_origin
-
-  local upstream
-  upstream="$(get_upstream 2>/dev/null || true)"
-
-  local branch dirty
-  branch="$(get_current_branch)"
-  if is_dirty; then dirty="yes"; else dirty="no"; fi
-
-  printf "Branch:   %s\n" "$branch"
-  printf "Upstream: %s\n" "${upstream:-'(none)'}"
-  printf "Dirty:    %s\n" "$dirty"
-
+  # Ship readiness
   if [[ -z "$upstream" ]]; then
-    printf "%s\n" "Would ship succeed? no (no upstream)"
-    exit "$EXIT_SUCCESS"
-  fi
-
-  git_read fetch "$REMOTE_NAME" --prune >/dev/null 2>&1 || true
-  local ahead behind
-  read -r ahead behind <<<"$(ahead_behind "$upstream")"
-  printf "Ahead:    %s\n" "$ahead"
-  printf "Behind:   %s\n" "$behind"
-
-  if [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
-    printf "%s\n" "Would ship succeed? no (diverged; pull --ff-only would fail)"
+    printf "Ship:     no (no upstream)\n"
+  elif [[ "$ahead" -gt 0 ]] && [[ "$behind" -gt 0 ]]; then
+    printf "Ship:     no (diverged; pull --ff-only would fail)\n"
+  elif [[ "$dirty" == "dirty" ]] || [[ "$ahead" -gt 0 ]] || [[ "$behind" -gt 0 ]]; then
+    printf "Ship:     yes (run bgit ship)\n"
   else
-    printf "%s\n" "Would ship succeed? yes"
+    printf "Ship:     nothing to ship\n"
   fi
-}
-
-
-cmd_where() {
-  ensure_git_repo
-
-  local root cwd branch upstream remote
-  root="$(git_read rev-parse --show-toplevel 2>/dev/null || true)"
-  cwd="$(pwd)"
-  branch="$(get_current_branch)"
-  upstream="$(get_upstream 2>/dev/null || true)"
-  remote="$(git_read remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
-
-  printf "Repo:     %s\n" "$root"
-  printf "CWD:      %s\n" "$cwd"
-  printf "Branch:   %s\n" "$branch"
-  printf "Upstream: %s\n" "${upstream:-'(none)'}"
-  printf "Remote:   %s\n" "$remote"
 }
 
 
@@ -538,29 +498,13 @@ cmd_log() {
 }
 
 
-cmd_remote() {
-  ensure_git_repo
-
-  local remotes
-  remotes="$(git_read remote -v 2>/dev/null || true)"
-  if [[ -n "$remotes" ]]; then
-    printf "%s\n" "Remotes:"
-    printf "%s\n" "$remotes"
-  fi
-
-  local upstream
-  upstream="$(get_upstream 2>/dev/null || true)"
-  printf "Upstream: %s\n" "${upstream:-'(none)'}"
-}
-
-
 cmd_version() {
   printf "bgit %s\n" "$BGIT_VERSION"
   git_read --version 2>/dev/null || true
 }
 
 
-HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> to <b>      safe merge + ship", "oldString": "  bgit merge <a> -> <b>      safe merge + ship\n  bgit undo                  remove last commit + force-push\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nFlags (all commands):\n  -v                         enable verbose/debug output\n\nship flags:\n  -m, --message "<msg>"      commit message (auto-generated if omitted)\n  --dry-run                  print planned git commands without executing\n\nVerbose: pass -v to any command, or set BGIT_VERBOSE=1.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
+HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> to <b>      safe merge + ship\n  bgit undo                  remove last commit + force-push\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show repo, branch, state, ship readiness\n  bgit log                   show last 5 commits\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nFlags (all commands):\n  -v                         enable verbose/debug output\n\nship flags:\n  -m, --message "<msg>"      commit message (auto-generated if omitted)\n  --dry-run                  print planned git commands without executing\n\nVerbose: pass -v to any command, or set BGIT_VERBOSE=1.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
 
 
 default_remote_branch() {
@@ -741,10 +685,7 @@ main() {
     branch) cmd_branch "$@" ;;
     merge) cmd_merge "$@" ;;
     status) cmd_status "$@" ;;
-    check) cmd_check "$@" ;;
-    where) cmd_where "$@" ;;
     log) cmd_log "$@" ;;
-    remote) cmd_remote "$@" ;;
     help) printf "%s" "$HELP_TEXT" ;;
     version) cmd_version "$@" ;;
     nuke) cmd_nuke "$@" ;;
