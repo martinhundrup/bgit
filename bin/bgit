@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-BGIT_VERSION="0.1.4"
+BGIT_VERSION="0.1.5"
 REMOTE_NAME="origin"
 
 EXIT_SUCCESS=0
