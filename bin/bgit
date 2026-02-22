@@ -15,9 +15,9 @@ EXIT_UNSHIPPED_COMMITS=6
 EXIT_MERGE_CONFLICT=7
 
 DRY_RUN=0
-VERBOSE="${BGIT_VERBOSE:-1}"
+VERBOSE="${BGIT_VERBOSE:-0}"
 if [[ "$VERBOSE" != "0" && "$VERBOSE" != "1" ]]; then
-  VERBOSE=1
+  VERBOSE=0
 fi
 
 
@@ -155,6 +155,23 @@ prompt_non_empty() {
 }
 
 
+auto_commit_message() {
+  local branch
+  branch="$(get_current_branch)"
+  local timestamp
+  timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+
+  local summary
+  summary="$(git_read diff --cached --stat 2>/dev/null | tail -1 | sed 's/^ *//')"
+
+  if [[ -n "$summary" ]]; then
+    printf "%s: %s (%s)" "$branch" "$summary" "$timestamp"
+  else
+    printf "%s: update %s" "$branch" "$timestamp"
+  fi
+}
+
+
 cmd_ship() {
   local message=""
 
@@ -166,6 +183,9 @@ cmd_ship() {
         ;;
       --dry-run)
         DRY_RUN=1
+        ;;
+      -v)
+        VERBOSE=1
         ;;
       *)
         die "Invalid usage." "$EXIT_INVALID_USAGE"
@@ -236,9 +256,9 @@ cmd_ship() {
 
   if [[ "$has_staged_changes" -eq 1 ]]; then
     if [[ -z "$message" ]]; then
-      dbg "ship: prompting for commit message (waiting for input)..."
-      message="$(prompt_non_empty "Commit message: ")"
-      dbg "ship: got commit message"
+      dbg "ship: auto-generating commit message"
+      message="$(auto_commit_message)"
+      dbg "ship: message='$message'"
     fi
     dbg "ship: committing..."
     git_write commit -m "$message" || exit $?
@@ -280,6 +300,9 @@ cmd_branch() {
     case "$1" in
       --dry-run)
         DRY_RUN=1
+        ;;
+      -v)
+        VERBOSE=1
         ;;
       *)
         if [[ -z "$name" ]]; then
@@ -526,7 +549,7 @@ cmd_version() {
 }
 
 
-HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> -> <b>      safe merge + ship\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nVerbose: bgit prints "+ git ..." before each mutating git command. Set BGIT_VERBOSE=0 to disable.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
+HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> -> <b>      safe merge + ship\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nFlags (all commands):\n  -v                         enable verbose/debug output\n\nship flags:\n  -m, --message "<msg>"      commit message (auto-generated if omitted)\n  --dry-run                  print planned git commands without executing\n\nVerbose: pass -v to any command, or set BGIT_VERBOSE=1.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
 
 
 default_remote_branch() {
@@ -572,6 +595,9 @@ cmd_nuke() {
         ;;
       --dry-run)
         DRY_RUN=1
+        ;;
+      -v)
+        VERBOSE=1
         ;;
       *)
         die "Invalid usage." "$EXIT_INVALID_USAGE"
@@ -650,6 +676,17 @@ main() {
     printf "%s" "$HELP_TEXT"
     exit "$EXIT_SUCCESS"
   fi
+
+  # Parse global flags before the subcommand
+  local args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -v) VERBOSE=1 ;;
+      *)  args+=("$1") ;;
+    esac
+    shift
+  done
+  set -- "${args[@]}"
 
   local cmd="$1"
   shift || true
