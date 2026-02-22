@@ -331,8 +331,9 @@ cmd_branch() {
     git_write switch --track -c "$name" "${REMOTE_NAME}/${name}" || exit $?
   else
     git_write switch -c "$name" || exit $?
-    printf "Created new local branch '%s'.\n" "$name"
-    printf "%s\n" "Run bgit ship to publish and set upstream."
+    dbg "branch: pushing new branch to origin"
+    git_write push -u "$REMOTE_NAME" "$name" || exit $?
+    printf "Created and published branch '%s'.\n" "$name"
   fi
 
   local upstream
