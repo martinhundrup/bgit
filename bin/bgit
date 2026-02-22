@@ -396,8 +396,8 @@ validate_branch_shipped() {
 
 
 cmd_merge() {
-  if [[ $# -ne 3 ]] || [[ "$2" != "->" ]]; then
-    die "Invalid merge format. Use: bgit merge <source> -> <destination>" "$EXIT_INVALID_USAGE"
+  if [[ $# -ne 3 ]] || { [[ "$2" != "->" ]] && [[ "$2" != "to" ]]; }; then
+    die "Invalid merge format. Use: bgit merge <source> to <destination>" "$EXIT_INVALID_USAGE"
   fi
 
   local source="$1"
@@ -550,7 +550,7 @@ cmd_version() {
 }
 
 
-HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> -> <b>      safe merge + ship\n  bgit undo                  remove last commit + force-push\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nFlags (all commands):\n  -v                         enable verbose/debug output\n\nship flags:\n  -m, --message "<msg>"      commit message (auto-generated if omitted)\n  --dry-run                  print planned git commands without executing\n\nVerbose: pass -v to any command, or set BGIT_VERBOSE=1.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
+HELP_TEXT=$'bgit is an opinionated wrapper around git for a simple workflow.\n\nCommands:\n  bgit ship                  pull --ff-only (if upstream), add ., commit, push\n  bgit branch <name>         safe switch + pull\n  bgit merge <a> to <b>      safe merge + ship", "oldString": "  bgit merge <a> -> <b>      safe merge + ship\n  bgit undo                  remove last commit + force-push\n  bgit nuke                  delete all local changes; mirror origin\n\n  bgit status                show branch/dirty/ahead/behind\n  bgit check                 preflight for ship\n  bgit where                 show repo + branch + remote\n  bgit log                   show last 5 commits\n  bgit remote                show remotes + upstream\n  bgit help                  show this help\n  bgit version               show bgit + git versions\n\nFlags (all commands):\n  -v                         enable verbose/debug output\n\nship flags:\n  -m, --message "<msg>"      commit message (auto-generated if omitted)\n  --dry-run                  print planned git commands without executing\n\nVerbose: pass -v to any command, or set BGIT_VERBOSE=1.\n\nbgit is for simple workflows. For advanced operations, use git directly.\n'
 
 
 default_remote_branch() {

@@ -276,7 +276,7 @@ git push -u origin feature >/dev/null 2>&1
 git checkout main >/dev/null 2>&1
 popd >/dev/null
 
-run_bgit merge feature '->' main
+run_bgit merge feature to main
 assert_exit "merge exits 0" 0
 assert_branch "now on main" "main"
 
@@ -296,7 +296,7 @@ setup_repos
 run_bgit merge foo bar
 assert_exit "merge bad format exits 1" 1
 
-run_bgit merge same '->' same
+run_bgit merge same to same
 assert_exit "merge same branch exits 1" 1
 
 # ── nuke ─────────────────────────────────────────────────────────────────

@@ -70,7 +70,7 @@ It is intentionally minimal. It does not expose advanced Git functionality. If a
 Mutating commands:
 - bgit ship
 - bgit branch <name>
-- bgit merge <source> -> <destination>
+- bgit merge <source> to <destination>
 - bgit undo
 - bgit nuke
 
@@ -200,7 +200,7 @@ If no upstream:
 
 ---
 
-# 4.3 bgit merge <source> -> <destination>
+# 4.3 bgit merge <source> to <destination>
 
 ## Purpose
 
@@ -208,11 +208,11 @@ Safely merge one branch into another, regardless of current branch.
 
 ## Format
 
-    bgit merge <source> -> <destination>
+    bgit merge <source> to <destination>
 
 Example:
 
-    bgit merge feature/login -> main
+    bgit merge feature/login to main
 
 ## Rules
 
@@ -226,10 +226,10 @@ Example:
 Step 0 — Parse
 
 Require exact format:
-    <source> -> <destination>
+    <source> to <destination>
 
 Reject if:
-- Missing arrow
+- Missing keyword
 - Same branch on both sides
 
 Step 1 — Preconditions

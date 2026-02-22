@@ -88,7 +88,7 @@ bgit branch hotfix            # create + push a new branch named hotfix
 
 ---
 
-### `bgit merge <source> -> <destination>`
+### `bgit merge <source> to <destination>`
 
 Safely merge one branch into another, then ship the result.
 
@@ -111,8 +111,8 @@ Safely merge one branch into another, then ship the result.
 **Use case:**
 
 ```bash
-bgit merge feature/login -> main        # merge feature into main
-bgit merge hotfix/crash -> develop       # merge hotfix into develop
+bgit merge feature/login to main        # merge feature into main
+bgit merge hotfix/crash to develop       # merge hotfix into develop
 ```
 
 **Error scenarios:**
